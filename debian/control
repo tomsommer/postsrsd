@@ -1,0 +1,17 @@
+Source: postsrsd
+Section: admin
+Priority: extra
+Maintainer: Timo Röhling <timo.roehling@gmx.de>
+Build-Depends: debhelper (>= 7.0.50~), cmake (>= 2.4), help2man
+Standards-Version: 3.9.3
+Homepage: https://github.com/roehling/postsrsd
+
+Package: postsrsd
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, postfix (>= 2.2)
+Description: Sender Rewriting Scheme implementation for Postfix
+ Implements two TCP lookup tables to rewrite mail addresses
+ as needed. The forward SRS is for sender envelope addresses
+ to prevent SPF-related bounces. The reverse SRS is for
+ recipient envelope addresses so that bounced mails can be
+ routed back to their original sender.
