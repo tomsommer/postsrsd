@@ -1,3 +1,10 @@
+postsrsd (0+git20121218-0~precise) precise; urgency=low
+
+  * Added chroot capability.
+  * Added AppArmor support.
+
+ -- Timo Röhling <timo.roehling@gmx.de>  Tue, 18 Dec 2012 17:51:44 +0100
+
 postsrsd (0+git20121217) precise; urgency=low
 
   * Initial release.
