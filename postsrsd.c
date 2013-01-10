@@ -85,6 +85,7 @@ static char hex2num (char c)
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'a' && c <= 'f') return c - 'a' + 10;
   if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return 0;
 }
 
 static char num2hex (char c)
@@ -139,12 +140,24 @@ static char* url_encode (char* buf, size_t len, const char *input)
   return buf;
 }
 
-static void handle_forward (srs_t *srs, FILE *fp, const char *address, const char *domain)
+static void handle_forward (srs_t *srs, FILE *fp, const char *address, const char *domain, const char **excludes)
 {
   int result;
+  size_t addrlen;
   char value[1024];
   char outputbuf[1024], *output;
 
+  addrlen = strlen(address);
+  for(; *excludes; excludes++) {
+    size_t len;
+    len = strlen(*excludes);
+    if (len >= addrlen) continue;
+    if (strcasecmp(*excludes, &address[addrlen - len]) == 0 && (**excludes == '.' || address[addrlen - len - 1] == '@')) {
+      fputs ("500 Domain excluded from SRS\n", fp);
+      fflush (fp);
+      return;
+    }
+  }
   result = srs_forward(srs, value, sizeof(value), address, domain);
   if (result == SRS_SUCCESS) {
     output = url_encode(outputbuf, sizeof(outputbuf), value);
@@ -158,7 +171,7 @@ static void handle_forward (srs_t *srs, FILE *fp, const char *address, const cha
   fflush (fp);
 }
 
-static void handle_reverse (srs_t *srs, FILE *fp, const char *address, const char *domain)
+static void handle_reverse (srs_t *srs, FILE *fp, const char *address, const char *domain, const char **excludes)
 {
   int result;
   char value[1024];
@@ -188,7 +201,7 @@ static void show_help ()
     "\n"
     "Usage: %s -s<file> -d<domain> [other options]\n"
     "Options:\n"
-    "   -s<file>       read secret from file (required)\n"
+    "   -s<file>       read secrets from file (required)\n"
     "   -d<domain>     set domain name for rewrite (required)\n"
     "   -f<port>       set port for the forward SRS lookup (default: 10001)\n"
     "   -r<port>       set port for the reverse SRS lookup (default: 10002)\n"
@@ -196,6 +209,7 @@ static void show_help ()
     "   -c<dir>        chroot to <dir> (default: none)\n"
     "   -u<user>       switch user id after port bind (default: none)\n"
     "   -t<seconds>    timeout for idle client connections (default: 1800)\n"
+    "   -X<domain>     exclude additional domain from address rewriting\n"
     "   -D             fork into background\n"
     "   -4             force IPv4 socket (default: any)\n"
     "   -6             force IPv6 socket (default: any)\n"
@@ -206,7 +220,7 @@ static void show_help ()
   );
 }
 
-typedef void(*handle_t)(srs_t*, FILE*, const char*, const char*);
+typedef void(*handle_t)(srs_t*, FILE*, const char*, const char*, const char**);
 
 int main (int argc, char **argv)
 {
@@ -216,18 +230,21 @@ int main (int argc, char **argv)
        *user = NULL, *domain = NULL, *chroot_dir = NULL;
   int forward_sock, reverse_sock;
   char *secret_file = NULL, *pid_file = NULL;
-  FILE *pf = NULL;
+  FILE *pf = NULL, *sf = NULL;
   struct passwd *pwd = NULL;
-  char secret[1024];
+  char secretbuf[1024], *secret = NULL;
   char *tmp;
   srs_t *srs;
   struct pollfd fds[3];
+  const char **excludes;
+  size_t s1 = 0, s2 = 1;
   handle_t handler[2] = { handle_forward, handle_reverse };
 
+  excludes = (const char**)calloc(1, sizeof(char*));
   tmp = strrchr(argv[0], '/');
   if (tmp) self = strdup(tmp + 1); else self = strdup(argv[0]);
 
-  while ((opt = getopt(argc, argv, "46d:f:r:s:u:t:p:c:Dhv")) != -1) {
+  while ((opt = getopt(argc, argv, "46d:f:r:s:u:t:p:c:X::Dhv")) != -1) {
     switch (opt) {
       case '?':
         return EXIT_FAILURE;
@@ -259,17 +276,35 @@ int main (int argc, char **argv)
         user = strdup(optarg);
         break;
       case 'c':
-	chroot_dir = strdup(optarg);
-	break;
+        chroot_dir = strdup(optarg);
+        break;
       case 'D':
         daemonize = TRUE;
         break;
       case 'h':
-	show_help();
+        show_help();
         return EXIT_SUCCESS;
+      case 'X':
+        if (optarg != NULL) {
+          tmp = strtok(optarg, ",; \t\r\n");
+          while (tmp) {
+            if (s1 + 1 >= s2) {
+              s2 *= 2;
+              excludes = (const char **)realloc(excludes, s2 * sizeof(char*));
+              if (excludes == NULL) {
+                fprintf (stderr, "%s: Out of memory\n\n", self);
+                return EXIT_FAILURE;
+              }
+            }
+            excludes[s1++] = strdup(tmp);
+            tmp = strtok(NULL, ",; \t\r\n");
+          }
+          excludes[s1] = NULL;
+        }
+        break;
       case 'v':
-	fprintf (stdout, "%s\n", VERSION);
-	return EXIT_SUCCESS;
+        fprintf (stdout, "%s\n", VERSION);
+        return EXIT_SUCCESS;
     }
   }
   if (domain == NULL) {
@@ -291,18 +326,11 @@ int main (int argc, char **argv)
   /* Read secret. The default installation makes this root accessible only. */
   if (secret_file != NULL) {
     size_t len;
-    FILE *fp = fopen(secret_file, "rb");
-    if (fp == NULL) {
+    sf = fopen(secret_file, "rb");
+    if (sf == NULL) {
       fprintf (stderr, "%s: Cannot open file with secret: %s\n", self, secret_file);
       return EXIT_FAILURE;
     }
-    len = fread(secret, 1, sizeof(secret) - 1, fp);
-    if (len == 0 || len > sizeof(secret) - 1) {
-      fprintf (stderr, "%s: Cannot read secret from file: %s\n", self, secret_file);
-      return EXIT_FAILURE;
-    }
-    secret[len] = 0;
-    fclose (fp);
   } else {
     fprintf (stderr, "%s: You must set a secret (-s)\n", self);
     show_help();
@@ -370,7 +398,12 @@ int main (int argc, char **argv)
   }
 
   srs = srs_new();
-  srs_add_secret (srs, secret);
+  while ((secret = fgets(secretbuf, sizeof(secretbuf), sf))) {
+    secret = strtok(secret, "\r\n");
+    if (secret)
+      srs_add_secret (srs, secret);
+  }
+  fclose (sf);
   srs_set_separator (srs, '+');
 
   fds[0].fd = forward_sock;
@@ -416,7 +449,7 @@ int main (int argc, char **argv)
             }
             key = url_decode(keybuf, sizeof(keybuf), token);
             if (!key) break;
-            handler[i](srs, fp, key, domain);
+            handler[i](srs, fp, key, domain, excludes);
             if (poll(&fds[2], 1, timeout * 1000) <= 0) break;
             line = fgets(linebuf, sizeof(linebuf), fp);
           }
