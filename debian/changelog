@@ -1,3 +1,11 @@
+postsrsd (0+git20130110-0~precise) precise; urgency=low
+
+  * Make startup scripts whitespace-safe
+  * Support for multiple secrets
+  * Optionally exclude domains from address rewriting
+
+ -- Timo Röhling <timo.roehling@gmx.de>  Fri, 11 Jan 2013 00:02:28 +0100
+
 postsrsd (0+git20121218.1-0~precise) precise; urgency=low
 
   * Older CMake versions do not support -1 for string length.
