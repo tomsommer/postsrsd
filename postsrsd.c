@@ -32,7 +32,7 @@
 #include <syslog.h>
 
 #ifndef VERSION
-#define VERSION "1.0"
+#define VERSION "1.1"
 #endif
 
 static char *self = NULL;
@@ -307,9 +307,12 @@ int main (int argc, char **argv)
         return EXIT_SUCCESS;
     }
   }
+  if (optind < argc) {
+    fprintf (stderr, "%s: extra argument on command line: %s\n", self, argv[optind]);
+    return EXIT_FAILURE;
+  }
   if (domain == NULL) {
     fprintf (stderr, "%s: You must set a home domain (-d)\n", self);
-    show_help();
     return EXIT_FAILURE;
   }
 
@@ -333,7 +336,6 @@ int main (int argc, char **argv)
     }
   } else {
     fprintf (stderr, "%s: You must set a secret (-s)\n", self);
-    show_help();
     return EXIT_FAILURE;
   }
   /* Bind ports. May require privileges if the config specifies ports below 1024 */
