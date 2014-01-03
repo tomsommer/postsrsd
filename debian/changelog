@@ -1,3 +1,11 @@
+postsrsd (1.1-1~precise) precise; urgency=low
+
+  * Maintenance release
+  * Fix various issues with the CMake script
+  * Fix command line parsing bug
+
+ -- Timo Röhling <timo.roehling@gmx.de>  Fri, 03 Jan 2014 00:58:18 +0100
+
 postsrsd (1.0-1~precise) precise; urgency=low
 
   * Stable release
