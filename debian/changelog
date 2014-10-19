@@ -1,3 +1,12 @@
+postsrsd (1.2-1~precise) precise; urgency=medium
+
+  * Listen to 127.0.0.1 as default
+  * Load correct timezone for logging
+  * Add support for more init systems
+  * Various other fixes
+
+ -- Timo Röhling <timo.roehling@gmx.de>  Sun, 19 Oct 2014 14:31:01 +0200
+
 postsrsd (1.1-1~precise) precise; urgency=low
 
   * Maintenance release
