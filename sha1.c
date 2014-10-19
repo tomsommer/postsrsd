@@ -334,19 +334,19 @@ sha_final(unsigned char digest[20], SHA_INFO *sha_info)
 */
 
 static void
-sha_digest(char *out, char *data, int len)
+sha_digest(char *out, char *data, unsigned len)
 {
 	SHA_INFO ctx;
 	sha_init(&ctx);
-	sha_update(&ctx, data, len);
-	sha_final(out, &ctx);
+	sha_update(&ctx, (sha_byte*)data, len);
+	sha_final((sha_byte*)out, &ctx);
 }
 
 void
-srs_hmac_init(srs_hmac_ctx_t *ctx, char *secret, int len)
+srs_hmac_init(srs_hmac_ctx_t *ctx, char *secret, unsigned len)
 {
 	char	 sbuf[SHA_BLOCKSIZE];
-	int		 i;
+	unsigned		 i;
 
 	if (len > SHA_BLOCKSIZE) {
 		sha_digest(sbuf, secret, len);
@@ -364,23 +364,23 @@ srs_hmac_init(srs_hmac_ctx_t *ctx, char *secret, int len)
 	memset(sbuf, 0, SHA_BLOCKSIZE);
 
 	sha_init(&ctx->sctx);
-	sha_update(&ctx->sctx, ctx->ipad, SHA_BLOCKSIZE);
+	sha_update(&ctx->sctx, (sha_byte*)ctx->ipad, SHA_BLOCKSIZE);
 }
 
 void
-srs_hmac_update(srs_hmac_ctx_t *ctx, char *data, int len)
+srs_hmac_update(srs_hmac_ctx_t *ctx, char *data, unsigned len)
 {
-	sha_update(&ctx->sctx, data, len);
+	sha_update(&ctx->sctx, (sha_byte*)data, len);
 }
 
 void
 srs_hmac_fini(srs_hmac_ctx_t *ctx, char *out)
 {
-	char	 buf[SHA_DIGESTSIZE + 1];
+	sha_byte buf[SHA_DIGESTSIZE + 1];
 
 	sha_final(buf, &ctx->sctx);
 	sha_init(&ctx->sctx);
-	sha_update(&ctx->sctx, ctx->opad, SHA_BLOCKSIZE);
+	sha_update(&ctx->sctx, (sha_byte*)ctx->opad, SHA_BLOCKSIZE);
 	sha_update(&ctx->sctx, buf, SHA_DIGESTSIZE);
-	sha_final(out, &ctx->sctx);
+	sha_final((sha_byte*)out, &ctx->sctx);
 }

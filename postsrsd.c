@@ -28,11 +28,22 @@
 #include <pwd.h>
 #include <string.h>
 #include <poll.h>
+#ifdef HAVE_SYS_TIME_H
+#include <sys/time.h>
+#endif
+#ifdef HAVE_TIME_H
+#include <time.h>
+#endif
+#ifdef HAVE_SYS_WAIT_H
+#include <sys/wait.h>
+#endif
+#ifdef HAVE_WAIT_H
 #include <wait.h>
+#endif
 #include <syslog.h>
 
 #ifndef VERSION
-#define VERSION "1.1"
+#define VERSION "1.2"
 #endif
 
 static char *self = NULL;
@@ -171,7 +182,7 @@ static void handle_forward (srs_t *srs, FILE *fp, const char *address, const cha
   fflush (fp);
 }
 
-static void handle_reverse (srs_t *srs, FILE *fp, const char *address, const char *domain, const char **excludes)
+static void handle_reverse (srs_t *srs, FILE *fp, const char *address, const char *domain __attribute__((unused)), const char **excludes __attribute__((unused)) )
 {
   int result;
   char value[1024];
@@ -180,7 +191,7 @@ static void handle_reverse (srs_t *srs, FILE *fp, const char *address, const cha
   if (result == SRS_SUCCESS) {
     output = url_encode(outputbuf, sizeof(outputbuf), value);
     fprintf (fp, "200 %s\n", output);
-    syslog (LOG_MAIL | LOG_INFO, "srs_reverse: <%s> rewritten as <%s>", address, value); 
+    syslog (LOG_MAIL | LOG_INFO, "srs_reverse: <%s> rewritten as <%s>", address, value);
   } else {
     fprintf (fp, "500 %s\n", srs_strerror(result));
     if (result != SRS_ENOTREWRITTEN && result != SRS_ENOTSRSADDRESS)
@@ -224,7 +235,7 @@ typedef void(*handle_t)(srs_t*, FILE*, const char*, const char*, const char**);
 
 int main (int argc, char **argv)
 {
-  int opt, timeout = 1800, family = AF_UNSPEC;
+  int opt, timeout = 1800, family = AF_INET;
   int daemonize = FALSE;
   char *forward_service = NULL, *reverse_service = NULL,
        *user = NULL, *domain = NULL, *chroot_dir = NULL;
@@ -234,6 +245,7 @@ int main (int argc, char **argv)
   struct passwd *pwd = NULL;
   char secretbuf[1024], *secret = NULL;
   char *tmp;
+  time_t now;
   srs_t *srs;
   struct pollfd fds[3];
   const char **excludes;
@@ -328,7 +340,6 @@ int main (int argc, char **argv)
   }
   /* Read secret. The default installation makes this root accessible only. */
   if (secret_file != NULL) {
-    size_t len;
     sf = fopen(secret_file, "rb");
     if (sf == NULL) {
       fprintf (stderr, "%s: Cannot open file with secret: %s\n", self, secret_file);
@@ -356,6 +367,9 @@ int main (int argc, char **argv)
 
   /* Open syslog now (NDELAY), because it may no longer reachable from chroot */
   openlog (self, LOG_PID | LOG_NDELAY, LOG_MAIL);
+  /* Force loading of timezone info (suggested by patrickdk77) */
+  now = time(NULL);
+  localtime (&now);
   /* We also have to lookup the uid of the unprivileged user for the same reason. */
   if (user) {
     errno = 0;
@@ -420,6 +434,8 @@ int main (int argc, char **argv)
     char keybuf[1024], *key;
 
     if (poll(fds, 2, 1000) < 0) {
+      if (errno == EINTR)
+        continue;
       if (daemonize)
         syslog (LOG_MAIL | LOG_ERR, "Poll failure: %s", strerror(errno));
       else
@@ -431,6 +447,10 @@ int main (int argc, char **argv)
         conn = accept(fds[i].fd, NULL, NULL);
         if (conn < 0) continue;
         if (fork() == 0) {
+          // close listen sockets so that we don't stop the main daemon process from restarting
+          close(forward_sock);
+          close(reverse_sock);
+
           fp = fdopen(conn, "r+");
           if (fp == NULL) exit(EXIT_FAILURE);
           fds[2].fd = conn;
@@ -438,20 +458,24 @@ int main (int argc, char **argv)
           if (poll(&fds[2], 1, timeout * 1000) <= 0) return EXIT_FAILURE;
           line = fgets(linebuf, sizeof(linebuf), fp);
           while (line) {
+            fseek (fp, 0, SEEK_CUR); /* Workaround for Solaris */
             char* token;
             token = strtok(line, " \r\n");
             if (token == NULL || strcmp(token, "get") != 0) {
               fprintf (fp, "500 Invalid request\n");
+              fflush (fp);
               return EXIT_FAILURE;
             }
             token = strtok(NULL, "\r\n");
             if (!token) {
               fprintf (fp, "500 Invalid request\n");
+              fflush (fp);
               return EXIT_FAILURE;
             }
             key = url_decode(keybuf, sizeof(keybuf), token);
             if (!key) break;
             handler[i](srs, fp, key, domain, excludes);
+            fflush (fp);
             if (poll(&fds[2], 1, timeout * 1000) <= 0) break;
             line = fgets(linebuf, sizeof(linebuf), fp);
           }
