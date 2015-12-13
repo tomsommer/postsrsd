@@ -13,7 +13,7 @@
 	dh $@ --buildsystem=cmake
 	
 override_dh_auto_configure:
-	dh_auto_configure -O--buildsystem=cmake -- -DCMAKE_BUILD_TYPE=Release -DGENERATE_SRS_SECRET=OFF -DCHROOT_DIR=/var/lib/postsrsd -DUSE_APPARMOR=ON
+	dh_auto_configure -O--buildsystem=cmake -- -DCMAKE_BUILD_TYPE=Release -DGENERATE_SRS_SECRET=OFF -DCHROOT_DIR=/var/lib/postsrsd -DUSE_APPARMOR=ON -DSYSD_UNIT_DIR=/lib/systemd/system -DINIT_FLAVOR=upstart
 
 override_dh_installinit:
 	dh_installinit -o
@@ -22,5 +22,5 @@ UPSTREAM_VERSION=$(shell dpkg-parsechangelog | grep Version: | cut -d' ' -f2 | c
 BASE_REVISION=$(shell git merge-base ppa master )
 
 create-orig-tar:
-	git archive --prefix=postsrsd/ -o ../postsrsd_$(UPSTREAM_VERSION).orig.tar.gz $(BASE_REVISION)
+	git archive --prefix=postsrsd-${UPSTREAM_VERSION}/ -o ../postsrsd_$(UPSTREAM_VERSION).orig.tar.gz $(BASE_REVISION)
 
