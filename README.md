@@ -80,8 +80,22 @@ your main.cf:
     sender_canonical_maps = tcp:127.0.0.1:10001
     sender_canonical_classes = envelope_sender
     recipient_canonical_maps = tcp:127.0.0.1:10002
-    recipient_canonical_classes= envelope_recipient
+    recipient_canonical_classes= envelope_recipient,header_recipient
 
-This will transparently rewrite incoming and outgoing envelope addresses.
+This will transparently rewrite incoming and outgoing envelope addresses,
+and additionally undo SRS rewrites in the To: header of bounce notifications
+and vacation autoreplies.
+
 Run `service postsrsd start` and `postfix reload` as root, or reboot.
+
+Known Issues
+------------
+
+- Due to the way PostSRSd is integrated with Postfix, sender addresses
+  will always be rewritten even if the mail is not forwarded at all. This
+  is because the canonical maps are read by the cleanup daemon, which
+  processes mails at the very beginning before any routing decision is made.
+
+- The Postfix package in CentOS 6 lacks the required support for TCP
+  dictionaries. Please upgrade your distribution or build Postfix yourself.
 
