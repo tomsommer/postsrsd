@@ -22,5 +22,5 @@ UPSTREAM_VERSION=$(shell dpkg-parsechangelog | grep Version: | cut -d' ' -f2 | c
 BASE_REVISION=$(shell git merge-base ppa master )
 
 create-orig-tar:
-	git archive --prefix=postsrsd-${UPSTREAM_VERSION}/ -o ../postsrsd_$(UPSTREAM_VERSION).orig.tar.gz $(BASE_REVISION)
+	git archive --prefix=postsrsd-$(UPSTREAM_VERSION)/ -o ../postsrsd_$(UPSTREAM_VERSION).orig.tar.gz $(BASE_REVISION)
 
